@@ -520,3 +520,181 @@ def contacts_menu():
             break
         else:
             print("Некорректный выбор. Попробуйте снова.")
+
+
+class Finance:
+    def __init__(self, rec_id, amnt, categ, date, descr):
+        self.id = rec_id
+        self.amnt = amnt
+        self.categ = categ
+        self.date = date
+        self.descr = descr
+
+
+class FinanceManager:
+    def __init__(self):
+        self.recs = []
+        self.load_recs()
+
+    def load_recs(self):
+        data = load_data(FINANCE_FILE, [])
+        self.recs = [Finance(**rec) for rec in data]
+
+    def save_recs(self):
+        data = [rec.__dict__ for rec in self.recs]
+        save_data(FINANCE_FILE, data)
+
+    def add_rec(self, amnt, categ, date, descr):
+        rec_id = max([rec.id for rec in self.recs], default=0) + 1
+        new_rec = Finance(rec_id, amnt, categ, date, descr)
+        self.recs.append(new_rec)
+        self.save_recs()
+        print("Запись успешно добавлена!")
+
+    def list_recs(self):
+        if not self.recs:
+            print("Финансовых записей нет.")
+            return
+        for rec in self.recs:
+            print(f"{rec.id}. {rec.date} | {rec.amnt} | {rec.categ} | {rec.descr}")
+
+    def generate_report(self, start_date, end_date):
+        try:
+            start_date_obj = datetime.datetime.strptime(start_date, "%d-%m-%Y")
+            end_date_obj = datetime.datetime.strptime(end_date, "%d-%m-%Y")
+        except ValueError:
+            print("Некорректный формат даты.")
+            return
+
+        filted_recs = [
+            rec
+            for rec in self.recs
+            if start_date_obj
+            <= datetime.datetime.strptime(rec.date, "%d-%m-%Y")
+            <= end_date_obj
+        ]
+        income = sum(rec.amnt for rec in filted_recs if rec.amnt > 0)
+        expenses = sum(rec.amnt for rec in filted_recs if rec.amnt < 0)
+        balance = income + expenses
+        print(f"Финансовый отчёт за период с {start_date} по {end_date}:")
+        print(f"- Общий доход: {income}")
+        print(f"- Общие расходы: {abs(expenses)}")
+        print(f"- Баланс: {balance}")
+
+        report_file = f"report_{start_date}_{end_date}.csv"
+        with open(report_file, mode="w", encoding="utf-8", newline="") as csv_file:
+            fieldnames = ["ID", "Дата", "Сумма", "Категория", "Описание"]
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for rec in filted_recs:
+                writer.writerow(
+                    {
+                        "ID": rec.id,
+                        "Дата": rec.date,
+                        "Сумма": rec.amnt,
+                        "Категория": rec.categ,
+                        "Описание": rec.descr,
+                    }
+                )
+        print(f"Подробная информация сохранена в файле {report_file}")
+
+    def delete_rec(self, rec_id):
+        rec = self.get_rec_by_id(rec_id)
+        if rec:
+            self.recs.remove(rec)
+            self.save_recs()
+            print("Запись успешно удалена!")
+        else:
+            print("Запись не найдена.")
+
+    def get_rec_by_id(self, rec_id):
+        for rec in self.recs:
+            if rec.id == rec_id:
+                return rec
+        return None
+
+    def export_recs_to_csv(self):
+        if not self.recs:
+            print("Финансовых записей нет.")
+            return
+        fname = "finance_export.csv"
+        with open(fname, mode="w", encoding="utf-8", newline="") as csv_file:
+            fieldnames = ["ID", "Сумма", "Категория", "Дата", "Описание"]
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for rec in self.recs:
+                writer.writerow(
+                    {
+                        "ID": rec.id,
+                        "Сумма": rec.amnt,
+                        "Категория": rec.categ,
+                        "Дата": rec.date,
+                        "Описание": rec.descr,
+                    }
+                )
+        print(f"Финансовые записи успешно экспортированы в файл {fname}")
+
+    def import_recs_from_csv(self):
+        fname = input("Введите имя CSV-файла для импорта: ")
+        if not os.path.exists(fname):
+            print("Файл не найден.")
+            return
+        with open(fname, mode="r", encoding="utf-8") as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                rec_id = max([rec.id for rec in self.recs], default=0) + 1
+                amnt = float(row.get("Сумма", "0"))
+                categ = row.get("Категория", "")
+                date = row.get("Дата", datetime.datetime.now().strftime("%d-%m-%Y"))
+                descr = row.get("Описание", "")
+                new_rec = Finance(rec_id, amnt, categ, date, descr)
+                self.recs.append(new_rec)
+            self.save_recs()
+        print("Финансовые записи успешно импортированы из CSV-файла.")
+
+
+def finance_menu():
+    manager = FinanceManager()
+    while True:
+        print("\nУправление финансовыми записями:")
+        print("1. Добавить новую запись")
+        print("2. Просмотреть все записи")
+        print("3. Генерация отчёта")
+        print("4. Удалить запись")
+        print("5. Экспорт финансовых записей в CSV")
+        print("6. Импорт финансовых записей из CSV")
+        print("7. Назад")
+        choice = input("Выберите действие: ")
+        if choice == "1":
+            try:
+                amnt = float(
+                    input(
+                        "Введите сумму (доход — положительное число, расход — отрицательное): "
+                    )
+                )
+                categ = input("Введите категорию: ")
+                date = input("Введите дату операции (в формате ДД-ММ-ГГГГ): ")
+                descr = input("Введите описание операции: ")
+                manager.add_rec(amnt, categ, date, descr)
+            except ValueError:
+                print("Некорректный ввод суммы.")
+        elif choice == "2":
+            manager.list_recs()
+        elif choice == "3":
+            start_date = input("Введите начальную дату (ДД-ММ-ГГГГ): ")
+            end_date = input("Введите конечную дату (ДД-ММ-ГГГГ): ")
+            manager.generate_report(start_date, end_date)
+        elif choice == "4":
+            try:
+                rec_id = int(input("Введите ID записи: "))
+                manager.delete_rec(rec_id)
+            except ValueError:
+                print("Некорректный ID.")
+        elif choice == "5":
+            manager.export_recs_to_csv()
+        elif choice == "6":
+            manager.import_recs_from_csv()
+        elif choice == "7":
+            break
+        else:
+            print("Некорректный выбор. Попробуйте снова.")
